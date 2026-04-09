@@ -1,0 +1,123 @@
+@startuml
+!theme aws-orange
+skinparam shadowing false
+skinparam linetype ortho
+
+title PDV System – AWS ECS Architecture with Public & Private Subnets
+
+' =========================
+' Frontend & Edge
+' =========================
+package "Client Side" {
+  [Ionic Angular Web App] as Web
+  [Ionic Mobile App\n(Android / iOS)] as Mobile
+}
+
+[Amazon CloudFront] as CloudFront
+[Amazon API Gateway\n(HTTP API)] as APIGW
+
+Web --> CloudFront
+Mobile --> CloudFront
+CloudFront --> APIGW
+
+' =========================
+' VPC
+' =========================
+package "Amazon VPC (10.0.0.0/16)" {
+
+  ' =========================
+  ' Public Subnets
+  ' =========================
+  package "Public Subnets\n(Multi-AZ)" {
+    [Application Load Balancer\n(Public ALB)] as ALB
+  }
+
+  ' =========================
+  ' Private Subnets
+  ' =========================
+  package "Private Subnets\n(Multi-AZ)" {
+
+    package "Amazon ECS Cluster\n(Fargate)" {
+
+      package "BFF Layer" {
+        [BFF ECS Service\nQuarkus\n(Task Definition)] as BFF
+      }
+
+      package "Core Microservices" {
+        [Products ECS Service\nQuarkus] as Products
+        [Clients ECS Service\nQuarkus] as Clients
+        [Orders ECS Service\nQuarkus] as Orders
+        [Payments ECS Service\nQuarkus] as Payments
+      }
+    }
+
+    package "Data Layer" {
+      [Amazon RDS\nPostgreSQL\n(db.t4g.micro)] as RDS
+    }
+  }
+}
+
+APIGW --> ALB
+ALB --> BFF
+
+BFF --> Products
+BFF --> Clients
+BFF --> Orders
+BFF --> Payments
+
+Products --> RDS
+Clients --> RDS
+Orders --> RDS
+Payments --> RDS
+
+' =========================
+' Messaging
+' =========================
+package "Event Streaming" {
+  [Amazon MSK\nKafka Cluster] as Kafka
+}
+
+Orders --> Kafka : publish events
+Payments --> Kafka : publish events
+Products --> Kafka : consume / publish
+Clients --> Kafka : consume / publish
+
+' =========================
+' CI/CD
+' =========================
+package "CI/CD Pipeline" {
+  [GitHub Repository] as GitHub
+  [GitHub Actions] as GHA
+  [Amazon ECR\nContainer Registry] as ECR
+}
+
+GitHub --> GHA : code push
+GHA --> ECR : build & push image
+GHA --> BFF : update ECS service
+GHA --> Products
+GHA --> Clients
+GHA --> Orders
+GHA --> Payments
+
+' =========================
+' Observability & Security
+' =========================
+package "Observability & Security" {
+  [Amazon CloudWatch] as CloudWatch
+  [AWS IAM\n(Task Roles & OIDC)] as IAM
+}
+
+BFF --> CloudWatch
+Products --> CloudWatch
+Clients --> CloudWatch
+Orders --> CloudWatch
+Payments --> CloudWatch
+
+BFF --> IAM
+Products --> IAM
+Clients --> IAM
+Orders --> IAM
+Payments --> IAM
+GHA --> IAM
+
+@enduml

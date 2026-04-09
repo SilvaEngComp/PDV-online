@@ -1,0 +1,104 @@
+@startuml
+!theme aws-orange
+skinparam shadowing false
+skinparam linetype ortho
+
+title PDV System – AWS + Kubernetes + BFF Architecture
+
+' =========================
+' Frontend Layer
+' =========================
+package "Frontend" {
+  [Ionic Angular Web App] as Web
+  [Ionic Mobile App\n(Android / iOS)] as Mobile
+}
+
+[Amazon CloudFront] as CloudFront
+[Amazon API Gateway\n(HTTP API)] as APIGW
+
+Web --> CloudFront
+Mobile --> CloudFront
+CloudFront --> APIGW
+
+' =========================
+' Kubernetes Layer
+' =========================
+package "Amazon EKS Cluster" {
+
+  [ALB Ingress Controller] as Ingress
+
+  package "BFF Layer" {
+    [BFF Service\n(Quarkus)] as BFF
+  }
+
+  package "Core Microservices" {
+    [Products Service\n(Quarkus)] as Products
+    [Clients Service\n(Quarkus)] as Clients
+    [Orders Service\n(Quarkus)] as Orders
+    [Payments Service\n(Quarkus)] as Payments
+  }
+
+  Ingress --> BFF
+  BFF --> Products
+  BFF --> Clients
+  BFF --> Orders
+  BFF --> Payments
+}
+
+APIGW --> Ingress
+
+' =========================
+' Messaging Layer
+' =========================
+package "Event Streaming" {
+  [Amazon MSK\n(Kafka Cluster)] as Kafka
+}
+
+Orders --> Kafka : publish events
+Payments --> Kafka : publish events
+Products --> Kafka : consume / publish
+Clients --> Kafka : consume / publish
+
+' =========================
+' Database Layer
+' =========================
+package "Relational Database" {
+  [Amazon RDS\nPostgreSQL\n(db.t4g.micro)] as RDS
+}
+
+Products --> RDS
+Clients --> RDS
+Orders --> RDS
+Payments --> RDS
+
+' =========================
+' CI/CD Layer
+' =========================
+package "CI/CD & Registry" {
+  [GitHub] as GitHub
+  [GitHub Actions] as GHA
+  [Amazon ECR\n(Container Registry)] as ECR
+}
+
+GitHub --> GHA : Code Push
+GHA --> ECR : Docker Images
+GHA --> Ingress : kubectl / deploy
+
+' =========================
+' Observability & Security
+' =========================
+package "Observability & Security" {
+  [Amazon CloudWatch] as CloudWatch
+  [AWS IAM\n(OIDC, Roles)] as IAM
+}
+
+BFF --> CloudWatch
+Products --> CloudWatch
+Clients --> CloudWatch
+Orders --> CloudWatch
+Payments --> CloudWatch
+
+GHA --> IAM
+Ingress --> IAM
+
+@enduml
